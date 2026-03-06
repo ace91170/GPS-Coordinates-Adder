@@ -1,137 +1,177 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<title>GPS Logger Live</title> 
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>GPS Logger - User</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        html, body { margin:0; padding:0; height: 100%; width: 100%; overflow: hidden; background: #222; font-family: sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100%; z-index: 1; background: #333; }
+        
+        /* Tombol Start Awal */
+        #start-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 5000;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .btn-start {
+            padding: 20px 40px; font-size: 20px; font-weight: bold;
+            background: #007bff; color: white; border: none; border-radius: 50px;
+            box-shadow: 0 0 20px rgba(0,123,255,0.5); cursor: pointer;
+        }
 
-<style>
-  html, body { margin:0; padding:0; height: 100%; overflow: hidden; background: #eee; }
-  #map { width:100%; height:100vh; z-index: 1; }
-  
-  .status-bar {
-    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-    z-index: 2000; background: rgba(0,0,0,0.8); color: white;
-    padding: 10px 20px; border-radius: 30px; font-size: 14px; pointer-events: none;
-    white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-  }
+        .status-bar {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 2000; background: rgba(0,0,0,0.85); color: #00ff00;
+            padding: 10px 15px; border-radius: 10px; font-size: 12px;
+            text-align: center; border: 1px solid #444; pointer-events: none;
+            min-width: 250px; line-height: 1.4;
+        }
 
-  .controls {
-    position: absolute; bottom: 40px; right: 15px; z-index: 2000;
-    display: flex; flex-direction: column; gap: 15px;
-  }
+        .controls {
+            position: absolute; bottom: 30px; right: 15px; z-index: 2000;
+            display: flex; flex-direction: column; gap: 12px;
+        }
 
-  .btn {
-    padding: 18px; border-radius: 12px; border: none; font-weight: bold;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.4); cursor: pointer; font-size: 14px;
-  }
-  .btn-download { background: #28a745; color: white; }
-  .btn-clear { background: #dc3545; color: white; opacity: 0.8; }
+        .btn {
+            padding: 15px; border-radius: 12px; border: none; font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; font-size: 14px;
+        }
+        .btn-download { background: #28a745; color: white; }
+        .btn-clear { background: #dc3545; color: white; font-size: 11px; }
 
-  #toast {
-    position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
-    background: #007bff; color: white; padding: 20px 30px; border-radius: 15px;
-    z-index: 3000; display: none; font-weight: bold; font-size: 18px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.5); border: 2px solid white;
-  }
-</style>
+        #toast {
+            position: absolute; top: 25%; left: 50%; transform: translate(-50%, -50%);
+            background: #fbff00; color: #000; padding: 15px 25px; border-radius: 10px;
+            z-index: 3000; display: none; font-weight: bold; font-size: 16px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.6);
+        }
+    </style>
 </head>
 <body>
 
-<div id="toast">📍 KOORDINAT DICATAT!</div>
-<div class="status-bar" id="stat">Menunggu Sinyal GPS...</div>
+<div id="start-overlay">
+    <button class="btn-start" onclick="initApp()">🚀 MULAI TRACKING</button>
+</div>
+
+<div id="toast">📍 TITIK DISIMPAN!</div>
+<div class="status-bar" id="stat">Klik tombol mulai di atas...</div>
 
 <div id="map"></div>
 
 <div class="controls">
-  <button class="btn btn-download" onclick="exportData()">💾 DOWNLOAD TXT</button>
-  <button class="btn btn-clear" onclick="clearData()">⚠️ RESET</button>
+    <button class="btn btn-download" onclick="exportData()">💾 UNDUH DATA (.TXT)</button>
+    <button class="btn btn-clear" onclick="clearData()">⚠️ HAPUS SEMUA</button>
 </div>
 
 <script>
-// Ambil data lama jika ada
 let savedCoords = JSON.parse(localStorage.getItem('myGpsLog')) || [];
 let currentPos = null;
+let map, marker;
 
-// 1. Inisialisasi Peta (Default ke Indonesia)
-const map = L.map('map').setView([-2.5489, 118.0149], 5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// Inisialisasi Aplikasi
+function initApp() {
+    document.getElementById('start-overlay').style.display = 'none';
+    
+    // Inisialisasi Peta
+    map = L.map('map').setView([-2.5, 118], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
 
-// Marker posisi kita
-const marker = L.circleMarker([0,0], {
-  radius: 10, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
-}).addTo(map);
+    marker = L.circleMarker([0,0], {
+        radius: 10, color: 'white', fillColor: '#007bff', fillOpacity: 1, weight: 3
+    }).addTo(map);
 
-// 2. Fungsi Geolocation
-function startTracking() {
-  if (!navigator.geolocation) {
-    alert("Browser Anda tidak mendukung GPS");
-    return;
-  }
-
-  navigator.geolocation.watchPosition(
-    (pos) => {
-      currentPos = [pos.coords.latitude, pos.coords.longitude];
-      const latlng = new L.LatLng(currentPos[0], currentPos[1]);
-      marker.setLatLng(latlng);
-      map.setView(latlng, 17); // Auto zoom ke posisi
-      
-      document.getElementById('stat').innerText = 
-        `LAT: ${currentPos[0].toFixed(5)} | LNG: ${currentPos[1].toFixed(5)} | TOTAL: ${savedCoords.length}`;
-    },
-    (err) => {
-      document.getElementById('stat').innerText = "GPS Error: " + err.message;
-    },
-    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-  );
+    startTracking();
 }
 
-// 3. Deteksi Double Tap (Ketuk 2x)
+function startTracking() {
+    if (!navigator.geolocation) {
+        alert("GPS tidak didukung oleh browser ini.");
+        return;
+    }
+
+    navigator.geolocation.watchPosition(
+        (pos) => {
+            currentPos = [pos.coords.latitude, pos.coords.longitude];
+            const latlng = new L.LatLng(currentPos[0], currentPos[1]);
+            
+            marker.setLatLng(latlng);
+            map.setView(latlng, 17);
+            
+            document.getElementById('stat').innerHTML = 
+                `LAT: ${currentPos[0].toFixed(6)} <br> LNG: ${currentPos[1].toFixed(6)} <br> TERLOG: ${savedCoords.length} TITIK`;
+        },
+        (err) => {
+            let msg = "GPS Error: ";
+            if(err.code == 1) msg += "Izin Ditolak";
+            else if(err.code == 2) msg += "Sinyal Lemah";
+            document.getElementById('stat').innerText = msg;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+// Double Tap Logik
 let lastTap = 0;
 document.addEventListener('touchend', function (e) {
-  let currentTime = new Date().getTime();
-  let tapLength = currentTime - lastTap;
-  if (tapLength < 300 && tapLength > 0) {
-    saveCoordinate();
-    e.preventDefault();
-  }
-  lastTap = currentTime;
+    let currentTime = new Date().getTime();
+    let tapLength = currentTime - lastTap;
+    if (tapLength < 300 && tapLength > 0) {
+        saveCoordinate();
+        e.preventDefault();
+    }
+    lastTap = currentTime;
 });
 
 function saveCoordinate() {
-  if (!currentPos) {
-    alert("Tunggu sinyal GPS stabil!");
-    return;
-  }
-  
-  const entry = `[${currentPos[0]}, ${currentPos[1]}]`;
-  savedCoords.push(entry);
-  localStorage.setItem('myGpsLog', JSON.stringify(savedCoords));
-  
-  // Efek Notifikasi
-  const toast = document.getElementById('toast');
-  toast.style.display = 'block';
-  setTimeout(() => { toast.style.display = 'none'; }, 800);
-  
-  document.getElementById('stat').innerText = 
-    `LAT: ${currentPos[0].toFixed(5)} | LNG: ${currentPos[1].toFixed(5)} | TOTAL: ${savedCoords.length}`;
+    if (!currentPos) {
+        alert("GPS belum mengunci posisi!");
+        return;
+    }
+    
+    const entry = `[${currentPos[0]}, ${currentPos[1]}]`;
+    savedCoords.push(entry);
+    localStorage.setItem('myGpsLog', JSON.stringify(savedCoords));
+    
+    const toast = document.getElementById('toast');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 1000);
+    
+    document.getElementById('stat').innerHTML = 
+        `LAT: ${currentPos[0].toFixed(6)} <br> LNG: ${currentPos[1].toFixed(6)} <br> TERLOG: ${savedCoords.length} TITIK`;
 }
 
-// 4. Download ke Android perform
 function exportData() {
-  if (savedCoords.length === 0) return alert("Belum ada data.");
-  
-  const content = savedCoords.join(",\n");
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  
-  const time = new Date().getHours() + "" + new Date().getMinutes();
-  a.href = url;
-  a.download = `GPS_Data_${time}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  window
+    if (savedCoords.length === 0) return alert("Data masih kosong.");
+    
+    const content = savedCoords.join(",\n");
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    const d = new Date();
+    const ts = `${d.getDate()}-${d.getMonth()+1}_${d.getHours()}${d.getMinutes()}`;
+    
+    a.href = url;
+    a.download = `GPS_LOG_${ts}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+function clearData() {
+    if (confirm("Hapus semua koordinat yang tersimpan?")) {
+        localStorage.removeItem('myGpsLog');
+        location.reload();
+    }
+}
+</script>
+</body>
+</html>
